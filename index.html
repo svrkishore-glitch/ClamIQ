@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CalmIQ — Exam Anxiety Detection</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --navy:#07111C;--navy2:#0F1F30;--navy3:#162840;
+  --coral:#FF4D5A;--coral2:#ff7a84;
+  --gold:#FFD166;--teal:#06D6A0;
+  --white:#F7F9FC;--grey:#7A92A8;--light:#EDF2F7;
+  --green:#06D6A0;--orange:#FF9F1C;--red:#FF4D5A;
+  --font-head:'Syne',sans-serif;
+  --font-body:'DM Sans',sans-serif;
+}
+body{font-family:var(--font-body);background:var(--navy);color:var(--white);min-height:100vh;overflow-x:hidden}
+
+/* noise overlay */
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.5}
+
+.screen{display:none;min-height:100vh;flex-direction:column;align-items:center;justify-content:center;padding:2rem;position:relative;z-index:1}
+.screen.active{display:flex}
+
+/* ── LANDING ── */
+#landing{background:radial-gradient(ellipse at 20% 50%, #0f2235 0%, #07111C 60%)}
+.hero-glow{position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(255,77,90,0.12) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+.logo{font-family:var(--font-head);font-size:3.5rem;font-weight:800;color:var(--white);letter-spacing:-3px;line-height:1}
+.logo span{color:var(--coral)}
+.logo-sub{font-size:.75rem;letter-spacing:4px;color:var(--grey);margin-top:.3rem;font-weight:400;text-transform:uppercase}
+.tagline{color:var(--grey);margin:1.5rem 0 2.5rem;font-size:1rem;text-align:center;max-width:420px;line-height:1.7}
+
+/* topic grid */
+.section-label{font-family:var(--font-head);font-size:.65rem;letter-spacing:4px;color:var(--coral);text-transform:uppercase;margin-bottom:1rem;align-self:flex-start;margin-left:calc(50% - 360px)}
+.topic-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;max-width:720px;width:100%;margin-bottom:2rem}
+@media(max-width:700px){.topic-grid{grid-template-columns:repeat(2,1fr)}.section-label{margin-left:0}}
+.topic-card{background:var(--navy2);border:1.5px solid rgba(255,255,255,0.06);border-radius:14px;padding:1rem .75rem;cursor:pointer;transition:all .2s;text-align:center;position:relative;overflow:hidden}
+.topic-card::after{content:'';position:absolute;inset:0;background:var(--coral);opacity:0;transition:opacity .2s;border-radius:inherit}
+.topic-card:hover::after,.topic-card.selected::after{opacity:.08}
+.topic-card.selected{border-color:var(--coral);box-shadow:0 0 0 1px var(--coral)}
+.topic-card .t-icon{font-size:1.8rem;margin-bottom:.5rem;display:block;position:relative;z-index:1}
+.topic-card .t-name{font-family:var(--font-head);font-size:.8rem;font-weight:700;position:relative;z-index:1}
+.topic-card .t-desc{font-size:.65rem;color:var(--grey);margin-top:.2rem;position:relative;z-index:1;line-height:1.4}
+
+/* mode strip */
+.mode-strip{display:flex;gap:.75rem;max-width:720px;width:100%;margin-bottom:2rem}
+.mode-pill{flex:1;background:var(--navy2);border:1.5px solid rgba(255,255,255,0.06);border-radius:50px;padding:.7rem 1rem;cursor:pointer;transition:all .2s;text-align:center;font-family:var(--font-head);font-size:.8rem;font-weight:700}
+.mode-pill:hover,.mode-pill.selected{border-color:var(--coral);background:rgba(255,77,90,0.1);color:var(--coral)}
+.mode-pill span{display:block;font-size:.65rem;color:var(--grey);font-family:var(--font-body);font-weight:400;margin-top:.15rem}
+
+.btn{background:var(--coral);color:var(--white);border:none;border-radius:50px;padding:.9rem 2.5rem;font-size:.95rem;font-weight:600;cursor:pointer;transition:all .25s;letter-spacing:.3px;font-family:var(--font-head)}
+.btn:hover{background:#e0343f;transform:translateY(-2px);box-shadow:0 8px 24px rgba(255,77,90,0.3)}
+.btn:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-outline{background:transparent;border:1.5px solid var(--gold);color:var(--gold)}
+.btn-outline:hover{background:var(--gold);color:var(--navy);box-shadow:0 8px 24px rgba(255,209,102,0.25)}
+
+/* ── SETUP ── */
+#setup{background:var(--navy)}
+.setup-box{background:var(--navy2);border:1px solid rgba(255,255,255,0.07);border-radius:24px;padding:2.5rem;max-width:480px;width:100%;text-align:center}
+.setup-box h2{font-family:var(--font-head);font-size:1.6rem;font-weight:800;margin-bottom:.5rem}
+.setup-box p{color:var(--grey);margin-bottom:1.5rem;font-size:.9rem;line-height:1.6}
+#video-preview{width:100%;border-radius:12px;margin-bottom:1rem;display:none;max-height:220px;object-fit:cover}
+.permission-status{padding:.75rem 1rem;border-radius:10px;font-size:.85rem;margin-bottom:1rem;display:none}
+.permission-status.ok{background:rgba(6,214,160,0.1);color:var(--green);border:1px solid rgba(6,214,160,0.3)}
+.permission-status.err{background:rgba(255,77,90,0.1);color:var(--red);border:1px solid rgba(255,77,90,0.3)}
+
+/* loading state */
+.loading-state{display:none;flex-direction:column;align-items:center;gap:1rem;padding:2rem}
+.loading-state.active{display:flex}
+.spinner{width:48px;height:48px;border:3px solid rgba(255,77,90,0.2);border-top-color:var(--coral);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-msg{font-family:var(--font-head);font-size:1rem;color:var(--grey)}
+.loading-topic{color:var(--coral);font-weight:700}
+
+/* ── QUIZ ── */
+#quiz{background:var(--navy);padding:0;align-items:stretch;justify-content:flex-start}
+.quiz-header{background:rgba(15,31,48,0.95);backdrop-filter:blur(12px);padding:1rem 2rem;display:flex;align-items:center;justify-content:space-between;width:100%;position:sticky;top:0;z-index:10;border-bottom:1px solid rgba(255,255,255,0.05)}
+.quiz-logo{font-family:var(--font-head);font-size:1.2rem;font-weight:800;color:var(--white)}.quiz-logo span{color:var(--coral)}
+.quiz-topic-badge{font-size:.7rem;background:rgba(255,77,90,0.15);color:var(--coral);border:1px solid rgba(255,77,90,0.2);border-radius:20px;padding:.2rem .7rem;font-family:var(--font-head);letter-spacing:1px;text-transform:uppercase}
+.anxiety-bar-wrap{flex:1;margin:0 1.5rem}
+.anxiety-label{font-size:.7rem;color:var(--grey);margin-bottom:.3rem;display:flex;justify-content:space-between;font-family:var(--font-head);letter-spacing:.5px}
+.anxiety-bar{height:6px;background:#1a2e40;border-radius:10px;overflow:hidden}
+.anxiety-fill{height:100%;border-radius:10px;transition:width .5s ease,background .5s ease;width:0%}
+.timer-badge{background:var(--navy);border:1.5px solid rgba(255,77,90,0.3);border-radius:50px;padding:.3rem .9rem;font-size:.85rem;font-weight:700;color:var(--coral);min-width:60px;text-align:center;font-family:var(--font-head)}
+.quiz-body{flex:1;display:flex;flex-direction:column;align-items:center;padding:2rem;width:100%}
+.progress-dots{display:flex;gap:.5rem;margin-bottom:2rem}
+.dot{width:8px;height:8px;border-radius:50%;background:#1a2e40;transition:all .3s}
+.dot.done{background:var(--green)}
+.dot.active{background:var(--coral);transform:scale(1.4);box-shadow:0 0 8px rgba(255,77,90,0.5)}
+.question-card{background:var(--navy2);border:1px solid rgba(255,255,255,0.07);border-radius:20px;padding:2rem;max-width:700px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.4)}
+.q-num{font-size:.7rem;color:var(--coral);font-weight:700;letter-spacing:3px;margin-bottom:.75rem;font-family:var(--font-head)}
+.q-text{font-family:var(--font-head);font-size:1.2rem;font-weight:700;line-height:1.5;margin-bottom:1.75rem}
+.options{display:flex;flex-direction:column;gap:.65rem}
+.option{background:rgba(22,40,64,0.7);border:1.5px solid rgba(255,255,255,0.07);border-radius:12px;padding:.9rem 1.2rem;cursor:pointer;font-size:.9rem;transition:all .2s;display:flex;align-items:center;gap:.75rem}
+.option:hover{border-color:var(--gold);background:rgba(255,209,102,0.05)}
+.option.selected{border-color:var(--coral);background:rgba(255,77,90,0.08)}
+.option.correct{border-color:var(--green);background:rgba(6,214,160,0.08)}
+.option.wrong{border-color:var(--red);background:rgba(255,77,90,0.1)}
+.option-letter{width:28px;height:28px;border-radius:8px;background:var(--navy);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;flex-shrink:0;font-family:var(--font-head)}
+.nav-row{display:flex;justify-content:space-between;align-items:center;margin-top:1.5rem;max-width:700px;width:100%}
+.cam-feed{position:fixed;bottom:1.5rem;right:1.5rem;width:200px;height:150px;border-radius:14px;overflow:hidden;border:1.5px solid rgba(255,255,255,0.1);display:none;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.cam-feed video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
+.cam-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+.face-label{position:absolute;bottom:4px;left:4px;font-size:.6rem;background:rgba(0,0,0,.7);padding:2px 6px;border-radius:6px;color:var(--white)}
+.signal-row{display:flex;gap:.65rem;flex-wrap:wrap;margin-top:1rem;max-width:700px;width:100%}
+.signal-badge{background:var(--navy2);border:1px solid rgba(255,255,255,0.05);border-radius:20px;padding:.3rem .8rem;font-size:.7rem;display:flex;align-items:center;gap:.4rem;font-family:var(--font-head)}
+.signal-dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+.signal-dot.warn{background:var(--orange)}
+.signal-dot.alert{background:var(--red);animation:pulse-dot 1s ease-in-out infinite}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── QUOTE POPUP ── */
+#quote-popup{
+  position:fixed;bottom:2rem;left:50%;transform:translateX(-50%) translateY(120px);
+  z-index:200;max-width:480px;width:calc(100% - 2rem);
+  background:linear-gradient(135deg,#0f2235,#162840);
+  border:1px solid rgba(255,209,102,0.3);border-radius:20px;
+  padding:1.5rem 1.75rem;
+  box-shadow:0 24px 64px rgba(0,0,0,.5),0 0 0 1px rgba(255,209,102,0.1);
+  transition:transform .5s cubic-bezier(.34,1.56,.64,1),opacity .5s ease;
+  opacity:0;pointer-events:none;
+}
+#quote-popup.show{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
+.qp-header{display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem}
+.qp-icon{font-size:1.4rem}
+.qp-title{font-family:var(--font-head);font-size:.7rem;letter-spacing:3px;color:var(--gold);text-transform:uppercase}
+.qp-close{margin-left:auto;background:none;border:none;color:var(--grey);cursor:pointer;font-size:1rem;padding:.2rem;transition:color .2s}
+.qp-close:hover{color:var(--white)}
+.qp-quote{font-family:var(--font-head);font-size:1.05rem;font-weight:600;line-height:1.6;color:var(--white);margin-bottom:.75rem}
+.qp-author{font-size:.75rem;color:var(--gold);font-style:italic}
+.qp-breathe{margin-top:.75rem;display:flex;align-items:center;gap:.75rem}
+.breath-mini{width:32px;height:32px;border-radius:50%;background:rgba(255,77,90,0.3);border:2px solid var(--coral);flex-shrink:0;transition:transform 4s ease;animation:breathe-mini 8s ease-in-out infinite}
+@keyframes breathe-mini{0%,100%{transform:scale(1);border-color:var(--coral)}50%{transform:scale(1.5);border-color:var(--gold)}}
+.breathe-text{font-size:.75rem;color:var(--grey);line-height:1.4}
+.anxiety-level-tag{display:inline-flex;align-items:center;gap:.3rem;font-size:.65rem;background:rgba(255,77,90,0.15);color:var(--coral);border-radius:20px;padding:.2rem .6rem;font-family:var(--font-head);margin-bottom:.5rem}
+
+/* ── INTERVENTION ── */
+#intervention{background:rgba(7,17,28,.97);position:fixed;inset:0;z-index:100;display:none;flex-direction:column;align-items:center;justify-content:center;padding:2rem}
+#intervention.active{display:flex}
+.interv-card{background:var(--navy2);border-radius:28px;padding:2.5rem;max-width:500px;width:100%;text-align:center;border:1px solid rgba(255,77,90,0.4);box-shadow:0 32px 64px rgba(0,0,0,.6)}
+.interv-card h2{font-family:var(--font-head);font-size:1.6rem;font-weight:800;margin:1rem 0 .5rem}
+.interv-card p{color:var(--grey);margin-bottom:1.5rem;font-size:.9rem;line-height:1.6}
+.breath-circle{width:110px;height:110px;border-radius:50%;background:rgba(255,77,90,0.2);border:3px solid var(--coral);margin:0 auto 1.5rem;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;transition:transform 4s ease;font-family:var(--font-head)}
+.breath-circle.expand{transform:scale(1.5)}
+.breath-circle.contract{transform:scale(1)}
+.motivation{background:rgba(6,214,160,0.08);border:1px solid rgba(6,214,160,0.2);border-radius:14px;padding:1rem 1.25rem;margin:1rem 0;font-size:.95rem;color:var(--green);font-style:italic;line-height:1.6}
+.countdown-wrap{font-size:.8rem;color:var(--grey);margin:.5rem 0}
+.countdown-wrap span{color:var(--gold);font-weight:700;font-family:var(--font-head)}
+
+/* ── RESULTS ── */
+#results{background:var(--navy);padding:2rem 1rem}
+.results-box{background:var(--navy2);border:1px solid rgba(255,255,255,0.07);border-radius:28px;padding:2rem;max-width:680px;width:100%}
+.results-box h1{font-family:var(--font-head);font-size:2rem;font-weight:800;margin-bottom:.3rem}
+.score-ring{width:120px;height:120px;margin:1.5rem auto}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:.85rem;margin:1.5rem 0}
+.stat-card{background:var(--navy);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:1rem;text-align:center}
+.stat-card .val{font-family:var(--font-head);font-size:1.8rem;font-weight:800}
+.stat-card .lbl{font-size:.7rem;color:var(--grey);margin-top:.2rem;letter-spacing:1px;text-transform:uppercase}
+.anxiety-timeline{margin:1.5rem 0}
+.tl-section-title{font-family:var(--font-head);font-size:.65rem;letter-spacing:3px;color:var(--grey);text-transform:uppercase;margin-bottom:.75rem}
+.tl-bar-wrap{display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem}
+.tl-label{font-size:.7rem;color:var(--grey);width:40px;text-align:right;font-family:var(--font-head)}
+.tl-bar{height:12px;border-radius:6px;min-width:4px;transition:width .8s}
+.tl-val{font-size:.7rem;color:var(--grey);width:32px}
+.feedback-list{margin:1rem 0}
+.fb-item{display:flex;gap:.75rem;align-items:flex-start;padding:.85rem;background:var(--navy);border:1px solid rgba(255,255,255,0.05);border-radius:12px;margin-bottom:.5rem;font-size:.85rem;line-height:1.5}
+.fb-icon{font-size:1.1rem;margin-top:1px;flex-shrink:0}
+
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--navy)}::-webkit-scrollbar-thumb{background:var(--navy2);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- LANDING -->
+<div id="landing" class="screen active">
+  <div class="hero-glow"></div>
+  <div style="text-align:center;margin-bottom:2.5rem">
+    <div class="logo">Calm<span>IQ</span></div>
+    <div class="logo-sub">AI-Powered Exam Anxiety Detection</div>
+    <p class="tagline">Choose your topic, answer AI-generated questions, and let CalmIQ monitor your stress in real time.</p>
+  </div>
+
+  <div class="section-label">Choose a Topic</div>
+  <div class="topic-grid" id="topic-grid">
+    <div class="topic-card selected" onclick="selectTopic('computer_science',this)">
+      <span class="t-icon">💻</span>
+      <div class="t-name">Computer Science</div>
+      <div class="t-desc">DS, algorithms, OS</div>
+    </div>
+    <div class="topic-card" onclick="selectTopic('machine_learning',this)">
+      <span class="t-icon">🧠</span>
+      <div class="t-name">Machine Learning</div>
+      <div class="t-desc">Models, training, eval</div>
+    </div>
+    <div class="topic-card" onclick="selectTopic('mathematics',this)">
+      <span class="t-icon">📐</span>
+      <div class="t-name">Mathematics</div>
+      <div class="t-desc">Calculus, algebra, stats</div>
+    </div>
+    <div class="topic-card" onclick="selectTopic('physics',this)">
+      <span class="t-icon">⚛️</span>
+      <div class="t-name">Physics</div>
+      <div class="t-desc">Mechanics, waves, quantum</div>
+    </div>
+    <div class="topic-card" onclick="selectTopic('biology',this)">
+      <span class="t-icon">🧬</span>
+      <div class="t-name">Biology</div>
+      <div class="t-desc">Cells, genetics, systems</div>
+    </div>
+    <div class="topic-card" onclick="selectTopic('chemistry',this)">
+      <span class="t-icon">🧪</span>
+      <div class="t-name">Chemistry</div>
+      <div class="t-desc">Elements, reactions, bonds</div>
+    </div>
+    <div class="topic-card" onclick="selectTopic('history',this)">
+      <span class="t-icon">📜</span>
+      <div class="t-name">History</div>
+      <div class="t-desc">World events & civilizations</div>
+    </div>
+    <div class="topic-card" onclick="selectTopic('general_knowledge',this)">
+      <span class="t-icon">🌍</span>
+      <div class="t-name">General Knowledge</div>
+      <div class="t-desc">Mixed trivia & facts</div>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top:.5rem">Detection Mode</div>
+  <div class="mode-strip">
+    <div class="mode-pill selected" onclick="selectMode('behavioral',this)" id="pill-behavioral">
+      ⌨️ Behavioral
+      <span>Timing & patterns only</span>
+    </div>
+    <div class="mode-pill" onclick="selectMode('camera',this)" id="pill-camera">
+      📷 Camera
+      <span>Face expression analysis</span>
+    </div>
+    <div class="mode-pill" onclick="selectMode('dual',this)" id="pill-dual">
+      🧠 Dual
+      <span>Both combined</span>
+    </div>
+  </div>
+
+  <button class="btn" onclick="goToSetup()">Start Practice Test →</button>
+  <p style="color:var(--grey);font-size:.75rem;margin-top:1.25rem">10 AI-generated questions · Real-time anxiety monitoring · Calming interventions</p>
+</div>
+
+<!-- SETUP -->
+<div id="setup" class="screen">
+  <div class="setup-box">
+    <h2 id="setup-title">Setting Up CalmIQ</h2>
+    <p id="setup-desc">Getting everything ready…</p>
+    <video id="video-preview" autoplay muted playsinline></video>
+    <div class="permission-status" id="perm-status"></div>
+    <div class="loading-state active" id="loading-state">
+      <div class="spinner"></div>
+      <div class="loading-msg">Generating <span class="loading-topic" id="loading-topic-name"></span> questions…</div>
+      <div style="font-size:.75rem;color:var(--grey)">Powered by Claude AI</div>
+    </div>
+    <button class="btn" id="start-btn" onclick="startQuiz()" style="display:none">Begin Quiz →</button>
+    <br id="setup-br" style="display:none"><br id="setup-br2" style="display:none">
+    <button class="btn btn-outline" onclick="goBack()" style="font-size:.85rem;padding:.6rem 1.5rem;margin-top:.75rem">← Change Mode</button>
+  </div>
+</div>
+
+<!-- QUIZ -->
+<div id="quiz" class="screen">
+  <div class="quiz-header">
+    <div>
+      <div class="quiz-logo">Calm<span>IQ</span></div>
+      <div class="quiz-topic-badge" id="quiz-topic-badge">Topic</div>
+    </div>
+    <div class="anxiety-bar-wrap">
+      <div class="anxiety-label"><span>Anxiety Level</span><span id="anx-pct">0%</span></div>
+      <div class="anxiety-bar"><div class="anxiety-fill" id="anxiety-fill"></div></div>
+    </div>
+    <div class="timer-badge" id="timer-badge">—</div>
+  </div>
+  <div class="quiz-body">
+    <div class="progress-dots" id="progress-dots"></div>
+    <div class="question-card" id="question-card">
+      <div class="q-num" id="q-num">QUESTION 1 OF 10</div>
+      <div class="q-text" id="q-text"></div>
+      <div class="options" id="options"></div>
+    </div>
+    <div class="nav-row">
+      <button class="btn btn-outline" id="skip-btn" onclick="skipQuestion()" style="padding:.6rem 1.5rem;font-size:.85rem">Skip →</button>
+      <button class="btn" id="next-btn" onclick="nextQuestion()" disabled>Next →</button>
+    </div>
+    <div class="signal-row" id="signal-row"></div>
+  </div>
+  <div class="cam-feed" id="cam-feed">
+    <video id="cam-video" autoplay muted playsinline></video>
+    <canvas class="cam-overlay" id="cam-canvas"></canvas>
+    <div class="face-label" id="face-label">Scanning…</div>
+  </div>
+</div>
+
+<!-- QUOTE POPUP -->
+<div id="quote-popup">
+  <div class="qp-header">
+    <div class="qp-icon">💛</div>
+    <div class="qp-title">Stay Calm</div>
+    <button class="qp-close" onclick="closeQuotePopup()">✕</button>
+  </div>
+  <div class="anxiety-level-tag" id="qp-level-tag">⚡ Elevated Stress</div>
+  <div class="qp-quote" id="qp-quote-text"></div>
+  <div class="qp-author" id="qp-author-text"></div>
+  <div class="qp-breathe">
+    <div class="breath-mini"></div>
+    <div class="breathe-text">Follow this circle — <strong>breathe in</strong> as it expands, <strong>out</strong> as it contracts. It helps.</div>
+  </div>
+</div>
+
+<!-- INTERVENTION OVERLAY -->
+<div id="intervention">
+  <div class="interv-card">
+    <div style="font-size:2.5rem">🛑</div>
+    <h2>High Anxiety Detected</h2>
+    <p>CalmIQ is pausing your quiz for a short reset. You've got this.</p>
+    <div class="breath-circle" id="breath-circle">Breathe In</div>
+    <div class="motivation" id="motivation-text">"You know this material. Take a breath and trust yourself."</div>
+    <div class="countdown-wrap">Resuming in <span id="resume-countdown">15</span>s</div>
+    <button class="btn" onclick="dismissIntervention()" style="margin-top:1rem">I'm Ready →</button>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div id="results" class="screen">
+  <div class="results-box">
+    <h1 id="result-title">Quiz Complete!</h1>
+    <p id="result-sub" style="color:var(--grey);margin-bottom:.5rem"></p>
+    <div id="result-topic-badge" style="margin-bottom:1rem"></div>
+    <svg class="score-ring" viewBox="0 0 120 120">
+      <circle cx="60" cy="60" r="50" fill="none" stroke="#162840" stroke-width="10"/>
+      <circle cx="60" cy="60" r="50" fill="none" stroke-width="10" stroke-linecap="round"
+        stroke-dasharray="314" stroke-dashoffset="314" id="score-arc"
+        transform="rotate(-90 60 60)" style="transition:stroke-dashoffset 1.2s ease"/>
+      <text x="60" y="65" text-anchor="middle" font-size="22" font-weight="800" fill="white" id="score-text" font-family="Syne">0%</text>
+    </svg>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="val" id="r-correct" style="color:var(--green)">0</div><div class="lbl">Correct</div></div>
+      <div class="stat-card"><div class="val" id="r-wrong" style="color:var(--red)">0</div><div class="lbl">Wrong</div></div>
+      <div class="stat-card"><div class="val" id="r-peak" style="color:var(--coral)">0%</div><div class="lbl">Peak Anxiety</div></div>
+      <div class="stat-card"><div class="val" id="r-interv" style="color:var(--gold)">0</div><div class="lbl">Interventions</div></div>
+    </div>
+    <div class="anxiety-timeline">
+      <div class="tl-section-title">Anxiety Timeline</div>
+      <div id="tl-bars"></div>
+    </div>
+    <div class="feedback-list" id="feedback-list"></div>
+    <div style="display:flex;gap:1rem;margin-top:1.5rem;flex-wrap:wrap">
+      <button class="btn" onclick="restartQuiz()">Try Again →</button>
+      <button class="btn btn-outline" onclick="goToLanding()">Change Topic</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────
+let mode = 'behavioral';
+let selectedTopic = 'computer_science';
+let selectedTopicLabel = 'Computer Science';
+let QUESTIONS = [];
+let currentQ = 0;
+let selectedOpt = null;
+let skipped = 0;
+let answerChanges = 0;
+let questionStartTime = 0;
+let answerTimes = [];
+let anxietyHistory = [];
+let interventionCount = 0;
+let correctCount = 0;
+let stream = null;
+let faceMeshActive = false;
+let faceAnxietyScore = 0;
+let behavioralScore = 0;
+let combinedScore = 0;
+let timerInterval = null;
+let elapsedSeconds = 0;
+let interventionCooldown = false;
+let breathInterval = null;
+let resumeInterval = null;
+let userAnswers = [];
+let skipCounts = new Array(10).fill(0);
+let lastAnswerTime = 0;
+let backtrackCount = 0;
+let quotePopupTimeout = null;
+let quoteCooldown = false;
+let lastQuoteLevel = 0;
+
+const TOPIC_LABELS = {
+  computer_science:'Computer Science', machine_learning:'Machine Learning',
+  mathematics:'Mathematics', physics:'Physics',
+  biology:'Biology', chemistry:'Chemistry',
+  history:'History', general_knowledge:'General Knowledge'
+};
+
+// ── CALMING QUOTES with authors ─────────────────────────
+const CALM_QUOTES = [
+  {text:"The secret of getting ahead is getting started.", author:"Mark Twain"},
+  {text:"You don't have to see the whole staircase, just take the first step.", author:"Martin Luther King Jr."},
+  {text:"Anxiety is the dizziness of freedom — breathe through it.", author:"Søren Kierkegaard"},
+  {text:"You are braver than you believe, and smarter than you think.", author:"A.A. Milne"},
+  {text:"Within you right now is the power to do things you never dreamed possible.", author:"Maxwell Maltz"},
+  {text:"Difficult roads often lead to beautiful destinations.", author:"Zig Ziglar"},
+  {text:"Every expert was once a beginner who refused to give up.", author:"Helen Hayes"},
+  {text:"The only way out is through. One question at a time.", author:"Robert Frost"},
+  {text:"Calm mind brings inner strength and self-confidence.", author:"Dalai Lama"},
+  {text:"You've survived 100% of your worst days. You've got this.", author:"Unknown"},
+  {text:"Your brain is not your enemy right now — it's just a little overwhelmed. Breathe.", author:"Unknown"},
+  {text:"Success is not final, failure is not fatal — it is the courage to continue that counts.", author:"Winston Churchill"},
+];
+
+// ── LANDING ────────────────────────────────────────────
+function selectTopic(t, el) {
+  selectedTopic = t;
+  selectedTopicLabel = TOPIC_LABELS[t] || t;
+  document.querySelectorAll('.topic-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function selectMode(m, el) {
+  mode = m;
+  document.querySelectorAll('.mode-pill').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+async function goToSetup() {
+  showScreen('setup');
+  document.getElementById('loading-topic-name').textContent = selectedTopicLabel;
+  document.getElementById('setup-title').textContent = 'Generating Questions…';
+  document.getElementById('setup-desc').textContent = `Creating 10 ${selectedTopicLabel} questions with Claude AI.`;
+
+  if (mode === 'camera' || mode === 'dual') await requestCamera();
+
+  await generateQuestions();
+}
+
+// ── CAMERA ─────────────────────────────────────────────
+async function requestCamera() {
+  const perm = document.getElementById('perm-status');
+  const vid = document.getElementById('video-preview');
+  perm.style.display = 'block';
+  perm.className = 'permission-status';
+  perm.textContent = 'Requesting camera access…';
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({video:{width:320,height:240,facingMode:'user'}});
+    vid.srcObject = stream; vid.style.display = 'block';
+    perm.className = 'permission-status ok';
+    perm.textContent = '✓ Camera ready';
+  } catch(e) {
+    perm.className = 'permission-status err';
+    perm.textContent = '⚠ Camera denied. Switching to behavioral mode.';
+    mode = 'behavioral';
+    setTimeout(()=>{ perm.textContent = '✓ Behavioral mode active'; perm.className = 'permission-status ok'; }, 1500);
+  }
+}
+
+// ── AI QUESTION GENERATION ─────────────────────────────
+async function generateQuestions() {
+  const loadEl = document.getElementById('loading-state');
+  loadEl.classList.add('active');
+
+  const topicPrompts = {
+    computer_science: "computer science (data structures, algorithms, OS, networking, OOP)",
+    machine_learning: "machine learning and AI (models, training, loss functions, evaluation, deep learning)",
+    mathematics: "mathematics (calculus, linear algebra, statistics, probability, discrete math)",
+    physics: "physics (classical mechanics, thermodynamics, electromagnetism, quantum physics, optics)",
+    biology: "biology (cell biology, genetics, evolution, human anatomy, ecology)",
+    chemistry: "chemistry (periodic table, chemical reactions, bonding, organic chemistry, stoichiometry)",
+    history: "world history (ancient civilizations, world wars, revolutions, historical figures, timelines)",
+    general_knowledge: "general knowledge (science, geography, culture, famous firsts, everyday facts)"
+  };
+
+  const topicDesc = topicPrompts[selectedTopic] || selectedTopic;
+
+  const prompt = `Generate exactly 10 multiple-choice quiz questions about ${topicDesc}.
+
+Return ONLY a valid JSON array. No markdown, no explanation, no extra text.
+Each object must have: "q" (question string), "opts" (array of exactly 4 answer strings), "ans" (index 0-3 of correct answer).
+
+Make questions varied in difficulty (mix easy, medium, hard). Make distractors plausible.
+
+Example format:
+[{"q":"What does CPU stand for?","opts":["Central Processing Unit","Computer Personal Unit","Core Processing Utility","Central Program Unit"],"ans":0}]`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+
+    const data = await response.json();
+    const raw = data.content.map(i => i.text || "").join("");
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(clean);
+
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      QUESTIONS = parsed.slice(0, 10);
+      onQuestionsReady();
+      return;
+    }
+  } catch(e) {
+    console.warn("AI generation failed, using fallback", e);
+  }
+
+  // Fallback
+  QUESTIONS = getFallbackQuestions(selectedTopic);
+  onQuestionsReady();
+}
+
+function onQuestionsReady() {
+  document.getElementById('loading-state').classList.remove('active');
+  document.getElementById('setup-title').textContent = `${selectedTopicLabel} Ready!`;
+  document.getElementById('setup-desc').textContent = `10 questions generated. Let's see how you handle them.`;
+  const startBtn = document.getElementById('start-btn');
+  startBtn.style.display = 'inline-block';
+  document.getElementById('setup-br').style.display = 'inline';
+  document.getElementById('setup-br2').style.display = 'inline';
+}
+
+function getFallbackQuestions(topic) {
+  const fallbacks = {
+    computer_science: [
+      {q:"What does CPU stand for?",opts:["Central Processing Unit","Computer Personal Unit","Core Processing Utility","Central Program Unit"],ans:0},
+      {q:"Which data structure uses LIFO?",opts:["Queue","Array","Stack","Linked List"],ans:2},
+      {q:"Time complexity of binary search?",opts:["O(n)","O(log n)","O(n²)","O(1)"],ans:1},
+      {q:"What does RAM stand for?",opts:["Random Access Memory","Read Access Module","Rapid Access Memory","Remote Access Module"],ans:0},
+      {q:"Which protocol is used for email sending?",opts:["HTTP","FTP","SMTP","DNS"],ans:2},
+      {q:"What is a compiler?",opts:["A program that runs code","A program that translates source code to machine code","A type of memory","A network protocol"],ans:1},
+      {q:"What does HTML stand for?",opts:["HyperText Markup Language","High Transfer Markup Language","HyperText Machine Language","HyperText Module Layer"],ans:0},
+      {q:"Which sorting algorithm has worst-case O(n log n)?",opts:["Bubble Sort","Selection Sort","Merge Sort","Insertion Sort"],ans:2},
+      {q:"What is an IP address?",opts:["A type of program","A unique identifier for a device on a network","A storage format","A CPU instruction"],ans:1},
+      {q:"What does API stand for?",opts:["Application Programming Interface","Automated Program Installer","Advanced Processing Input","Application Process Integration"],ans:0},
+    ],
+    default: [
+      {q:"What is the capital of France?",opts:["London","Berlin","Paris","Madrid"],ans:2},
+      {q:"Which planet is closest to the Sun?",opts:["Venus","Earth","Mars","Mercury"],ans:3},
+      {q:"What is H2O?",opts:["Hydrogen","Oxygen","Water","Carbon Dioxide"],ans:2},
+      {q:"How many continents are there?",opts:["5","6","7","8"],ans:2},
+      {q:"Who wrote Romeo and Juliet?",opts:["Charles Dickens","William Shakespeare","Mark Twain","Jane Austen"],ans:1},
+      {q:"What is the speed of light?",opts:["300,000 km/s","150,000 km/s","500,000 km/s","1,000,000 km/s"],ans:0},
+      {q:"What is the largest ocean?",opts:["Atlantic","Indian","Arctic","Pacific"],ans:3},
+      {q:"What year did WW2 end?",opts:["1943","1944","1945","1946"],ans:2},
+      {q:"What is the chemical symbol for gold?",opts:["Go","Gd","Au","Ag"],ans:2},
+      {q:"How many bones in the adult human body?",opts:["186","206","216","226"],ans:1},
+    ]
+  };
+  return fallbacks[topic] || fallbacks.default;
+}
+
+function goBack() {
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  showScreen('landing');
+}
+
+// ── QUIZ ───────────────────────────────────────────────
+function startQuiz() {
+  showScreen('quiz');
+  document.getElementById('quiz-topic-badge').textContent = selectedTopicLabel;
+  buildProgressDots();
+  renderQuestion();
+  startTimer();
+  if((mode==='camera'||mode==='dual') && stream){
+    document.getElementById('cam-feed').style.display = 'block';
+    document.getElementById('cam-video').srcObject = stream;
+    initFaceMesh();
+  }
+}
+
+function buildProgressDots() {
+  const d = document.getElementById('progress-dots');
+  d.innerHTML = '';
+  for(let i=0;i<QUESTIONS.length;i++){
+    const dot = document.createElement('div');
+    dot.className = 'dot' + (i===0?' active':'');
+    dot.id = 'dot-'+i;
+    d.appendChild(dot);
+  }
+}
+
+function renderQuestion() {
+  const q = QUESTIONS[currentQ];
+  document.getElementById('q-num').textContent = `QUESTION ${currentQ+1} OF ${QUESTIONS.length}`;
+  document.getElementById('q-text').textContent = q.q;
+  selectedOpt = null; answerChanges = 0;
+  document.getElementById('next-btn').disabled = true;
+  questionStartTime = Date.now();
+  lastAnswerTime = 0;
+  const opts = document.getElementById('options');
+  opts.innerHTML = '';
+  const letters = ['A','B','C','D'];
+  q.opts.forEach((o,i)=>{
+    const div = document.createElement('div');
+    div.className = 'option';
+    div.innerHTML = `<div class="option-letter">${letters[i]}</div><span>${o}</span>`;
+    div.onclick = () => selectOption(i,div);
+    opts.appendChild(div);
+  });
+  updateSignals();
+  document.getElementById('skip-btn').disabled = false;
+}
+
+function selectOption(idx,el) {
+  const now = Date.now();
+  if(selectedOpt !== null){ answerChanges++; backtrackCount++; }
+  if(lastAnswerTime > 0 && (now-lastAnswerTime) < 1500) answerChanges += 0.5;
+  lastAnswerTime = now;
+  selectedOpt = idx;
+  document.querySelectorAll('.option').forEach(o=>o.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('next-btn').disabled = false;
+  recalcAnxiety();
+  updateSignals();
+}
+
+function skipQuestion() {
+  if(currentQ < QUESTIONS.length) skipCounts[currentQ]++;
+  skipped++;
+  userAnswers[currentQ] = -1;
+  answerTimes[currentQ] = Math.round((Date.now()-questionStartTime)/1000);
+  anxietyHistory[currentQ] = combinedScore;
+  updateDot(currentQ,'done');
+  currentQ++;
+  if(currentQ >= QUESTIONS.length){ finishQuiz(); return; }
+  updateDot(currentQ,'active');
+  renderQuestion();
+  checkIntervention();
+}
+
+function nextQuestion() {
+  const q = QUESTIONS[currentQ];
+  userAnswers[currentQ] = selectedOpt;
+  if(selectedOpt === q.ans) correctCount++;
+  answerTimes[currentQ] = Math.round((Date.now()-questionStartTime)/1000);
+  anxietyHistory[currentQ] = combinedScore;
+  updateDot(currentQ,'done');
+  currentQ++;
+  if(currentQ >= QUESTIONS.length){ finishQuiz(); return; }
+  updateDot(currentQ,'active');
+  renderQuestion();
+  checkIntervention();
+}
+
+function updateDot(i,state) {
+  const d = document.getElementById('dot-'+i);
+  if(d) d.className = 'dot '+state;
+}
+
+function startTimer() {
+  elapsedSeconds = 0;
+  timerInterval = setInterval(()=>{
+    elapsedSeconds++;
+    const m = Math.floor(elapsedSeconds/60).toString().padStart(2,'0');
+    const s = (elapsedSeconds%60).toString().padStart(2,'0');
+    document.getElementById('timer-badge').textContent = m+':'+s;
+    recalcAnxiety();
+  },1000);
+}
+
+function recalcAnxiety() {
+  const elapsed = (Date.now()-questionStartTime)/1000;
+  let score = 0;
+  if(elapsed>30) score+=20; else if(elapsed>15) score+=10;
+  if(answerChanges>=3) score+=25; else if(answerChanges>=1) score+=12;
+  if(skipCounts.reduce((a,b)=>a+b,0)>=3) score+=20; else if(skipped>=1) score+=10;
+  if(backtrackCount>=4) score+=15;
+  if(selectedOpt===null && elapsed>20) score+=10;
+  behavioralScore = Math.min(100,score);
+  if(mode==='camera'||mode==='dual'){
+    combinedScore = Math.min(100,Math.round(behavioralScore*0.55 + faceAnxietyScore*0.45));
+  } else {
+    combinedScore = behavioralScore;
+  }
+  updateAnxietyBar(combinedScore);
+  checkQuotePopup(combinedScore);
+}
+
+function updateAnxietyBar(val) {
+  const fill = document.getElementById('anxiety-fill');
+  fill.style.width = val+'%';
+  document.getElementById('anx-pct').textContent = Math.round(val)+'%';
+  fill.style.background = val<30 ? '#06D6A0' : val<60 ? '#FF9F1C' : '#FF4D5A';
+}
+
+// ── QUOTE POPUP ────────────────────────────────────────
+function checkQuotePopup(level) {
+  if(quoteCooldown || interventionCooldown) return;
+  // Show mild popup at 35–64%, full intervention at 65+
+  if(level >= 35 && level < 65 && Math.abs(level - lastQuoteLevel) >= 8) {
+    showQuotePopup(level);
+  }
+}
+
+function showQuotePopup(anxietyLevel) {
+  quoteCooldown = true;
+  lastQuoteLevel = anxietyLevel;
+  const q = CALM_QUOTES[Math.floor(Math.random() * CALM_QUOTES.length)];
+  document.getElementById('qp-quote-text').textContent = '\u201C' + q.text + '\u201D';
+  document.getElementById('qp-author-text').textContent = '— ' + q.author;
+  const tag = document.getElementById('qp-level-tag');
+  if(anxietyLevel >= 55){ tag.textContent = '🔴 High Stress Detected'; tag.style.background='rgba(255,77,90,0.2)'; tag.style.color='var(--coral)'; }
+  else if(anxietyLevel >= 40){ tag.textContent = '🟠 Elevated Stress'; tag.style.background='rgba(255,159,28,0.15)'; tag.style.color='var(--orange)'; }
+  else { tag.textContent = '🟡 Mild Stress'; tag.style.background='rgba(255,209,102,0.1)'; tag.style.color='var(--gold)'; }
+  document.getElementById('quote-popup').classList.add('show');
+  if(quotePopupTimeout) clearTimeout(quotePopupTimeout);
+  quotePopupTimeout = setTimeout(()=>{ closeQuotePopup(); }, 10000);
+  setTimeout(()=>{ quoteCooldown = false; }, 20000);
+}
+
+function closeQuotePopup() {
+  document.getElementById('quote-popup').classList.remove('show');
+  if(quotePopupTimeout) clearTimeout(quotePopupTimeout);
+}
+
+// ── SIGNAL BADGES ──────────────────────────────────────
+function updateSignals() {
+  const elapsed = Math.round((Date.now()-questionStartTime)/1000);
+  const signals = [
+    {label:'Time: '+elapsed+'s', level: elapsed>30?'alert':elapsed>15?'warn':'ok'},
+    {label:'Changes: '+Math.floor(answerChanges), level: answerChanges>=3?'alert':answerChanges>=1?'warn':'ok'},
+    {label:'Skips: '+skipped, level: skipped>=3?'alert':skipped>=1?'warn':'ok'},
+    {label:'Backtrack: '+backtrackCount, level: backtrackCount>=4?'alert':backtrackCount>=2?'warn':'ok'},
+  ];
+  if(mode==='camera'||mode==='dual'){
+    signals.push({label:'Face: '+Math.round(faceAnxietyScore)+'%', level: faceAnxietyScore>60?'alert':faceAnxietyScore>30?'warn':'ok'});
+  }
+  document.getElementById('signal-row').innerHTML = signals.map(s=>
+    `<div class="signal-badge"><div class="signal-dot ${s.level}"></div>${s.label}</div>`
+  ).join('');
+}
+
+// ── INTERVENTION (severe anxiety) ──────────────────────
+function checkIntervention() {
+  if(interventionCooldown) return;
+  if(combinedScore >= 65) triggerIntervention();
+}
+
+function triggerIntervention() {
+  closeQuotePopup();
+  interventionCooldown = true;
+  interventionCount++;
+  const mot = CALM_QUOTES[Math.floor(Math.random()*CALM_QUOTES.length)];
+  document.getElementById('motivation-text').textContent = '\u201C' + mot.text + '\u201D — ' + mot.author;
+  document.getElementById('intervention').classList.add('active');
+  let t = 15;
+  document.getElementById('resume-countdown').textContent = t;
+  startBreathingExercise();
+  resumeInterval = setInterval(()=>{
+    t--;
+    document.getElementById('resume-countdown').textContent = t;
+    if(t<=0){ dismissIntervention(); }
+  },1000);
+}
+
+function startBreathingExercise() {
+  const circle = document.getElementById('breath-circle');
+  let phase = 'in';
+  circle.textContent = 'Breathe In';
+  circle.classList.add('expand');
+  breathInterval = setInterval(()=>{
+    if(phase==='in'){ phase='out'; circle.textContent='Breathe Out'; circle.classList.remove('expand'); circle.classList.add('contract'); }
+    else { phase='in'; circle.textContent='Breathe In'; circle.classList.remove('contract'); circle.classList.add('expand'); }
+  },4000);
+}
+
+function dismissIntervention() {
+  clearInterval(resumeInterval); clearInterval(breathInterval);
+  document.getElementById('intervention').classList.remove('active');
+  document.getElementById('breath-circle').className = 'breath-circle';
+  setTimeout(()=>{ interventionCooldown = false; },8000);
+}
+
+// ── FINISH ─────────────────────────────────────────────
+function finishQuiz() {
+  clearInterval(timerInterval);
+  closeQuotePopup();
+  faceLoopRunning = false; if(stream) stream.getTracks().forEach(t=>t.stop());
+  showScreen('results');
+  renderResults();
+}
+
+function renderResults() {
+  const total = QUESTIONS.length;
+  const pct = Math.round((correctCount/total)*100);
+  document.getElementById('result-title').textContent = pct>=70?'Great Job! 🎉':pct>=50?'Good Effort! 👍':'Keep Practicing! 💪';
+  document.getElementById('result-sub').textContent = `You answered ${correctCount}/${total} correctly in ${Math.floor(elapsedSeconds/60)}m ${elapsedSeconds%60}s`;
+  document.getElementById('result-topic-badge').innerHTML = `<span style="font-size:.75rem;background:rgba(255,77,90,0.15);color:var(--coral);border-radius:20px;padding:.25rem .8rem;font-family:var(--font-head);letter-spacing:1px">${selectedTopicLabel}</span>`;
+  document.getElementById('r-correct').textContent = correctCount;
+  document.getElementById('r-wrong').textContent = total-correctCount-userAnswers.filter(a=>a===-1).length;
+  const peak = Math.max(...anxietyHistory,0);
+  document.getElementById('r-peak').textContent = Math.round(peak)+'%';
+  document.getElementById('r-interv').textContent = interventionCount;
+  setTimeout(()=>{
+    const arc = document.getElementById('score-arc');
+    arc.style.strokeDashoffset = 314-(314*(pct/100));
+    arc.style.stroke = pct>=70?'#06D6A0':pct>=50?'#FF9F1C':'#FF4D5A';
+    document.getElementById('score-text').textContent = pct+'%';
+  },300);
+  document.getElementById('tl-bars').innerHTML = anxietyHistory.map((v,i)=>{
+    const color = v<30?'#06D6A0':v<60?'#FF9F1C':'#FF4D5A';
+    const w = Math.max(4,Math.round(v*1.6));
+    return `<div class="tl-bar-wrap"><div class="tl-label">Q${i+1}</div><div class="tl-bar" style="width:${w}px;background:${color}"></div><div class="tl-val">${Math.round(v)}%</div></div>`;
+  }).join('');
+  const feedback = [];
+  if(peak>=65) feedback.push({icon:'🧘',text:'High anxiety was detected. Try taking breaks and deep breathing before your next exam.'});
+  if(skipped>=2) feedback.push({icon:'⚡',text:`You skipped ${skipped} questions. Trust your instincts more — your first answer is often right.`});
+  if(backtrackCount>=3) feedback.push({icon:'🔄',text:`You changed answers ${backtrackCount} times. Commit to your choice sooner.`});
+  if(correctCount>=Math.floor(total*0.8)) feedback.push({icon:'🏆',text:'Excellent accuracy! Your knowledge of '+selectedTopicLabel+' is strong.'});
+  if(interventionCount>0) feedback.push({icon:'💚',text:`CalmIQ intervened ${interventionCount} time(s) and helped you reset. The tool is working!`});
+  if(feedback.length===0) feedback.push({icon:'✨',text:'Solid performance! Keep reviewing your weakest areas.'});
+  document.getElementById('feedback-list').innerHTML = feedback.map(f=>
+    `<div class="fb-item"><div class="fb-icon">${f.icon}</div><div>${f.text}</div></div>`
+  ).join('');
+}
+
+function restartQuiz() {
+  currentQ=0; selectedOpt=null; skipped=0; answerChanges=0;
+  questionStartTime=0; answerTimes=[]; anxietyHistory=[]; interventionCount=0;
+  correctCount=0; faceAnxietyScore=0; behavioralScore=0; combinedScore=0;
+  elapsedSeconds=0; backtrackCount=0; skipCounts=new Array(10).fill(0); userAnswers=[];
+  interventionCooldown=false; quoteCooldown=false; lastQuoteLevel=0; QUESTIONS=[]; faceLoopRunning=false; faceLandmarker=null; faceMeshActive=false;
+  showScreen('landing');
+}
+
+function goToLanding() { restartQuiz(); }
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s=>{ s.classList.remove('active'); s.style.display='none'; });
+  const el = document.getElementById(id);
+  el.style.display='flex'; el.classList.add('active');
+}
+
+// ── FACE DETECTION via face-api.js ───────────────────────
+let faceApiReady = false;
+let faceLoopRunning = false;
+const MODELS_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model';
+
+async function initFaceMesh() {
+  const label = document.getElementById('face-label');
+  label.textContent = '⏳ Loading model…';
+
+  // Wait for face-api.js to be available on window
+  let waited = 0;
+  while (typeof faceapi === 'undefined' && waited < 8000) {
+    await new Promise(r => setTimeout(r, 200));
+    waited += 200;
+  }
+  if (typeof faceapi === 'undefined') {
+    label.textContent = '⚠ Model unavailable';
+    simulateFaceData(); return;
+  }
+
+  try {
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL),
+      faceapi.nets.faceExpressionNet.loadFromUri(MODELS_URL),
+      faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODELS_URL),
+    ]);
+    label.textContent = '✅ Face detection ready';
+    faceApiReady = true;
+    faceMeshActive = true;
+
+    const camVid = document.getElementById('cam-video');
+    if (camVid.readyState < 2) {
+      await new Promise(resolve => camVid.addEventListener('canplay', resolve, { once: true }));
+    }
+    await camVid.play().catch(() => {});
+
+    // Size canvas once to match video
+    const canvas = document.getElementById('cam-canvas');
+    canvas.width  = camVid.videoWidth  || 320;
+    canvas.height = camVid.videoHeight || 240;
+
+    faceLoopRunning = true;
+    faceDetectionLoop(camVid, canvas);
+  } catch(e) {
+    console.warn('face-api init error:', e);
+    label.textContent = '⚠ Behavioral only';
+    simulateFaceData();
+  }
+}
+
+async function faceDetectionLoop(camVid, canvas) {
+  if (!faceLoopRunning || !faceApiReady) return;
+
+  if (camVid.readyState >= 2 && !camVid.paused) {
+    try {
+      const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
+      const detection = await faceapi
+        .detectSingleFace(camVid, options)
+        .withFaceLandmarks(true)
+        .withFaceExpressions();
+
+      processFaceResult(detection, canvas);
+    } catch(e) { /* skip frame */ }
+  }
+
+  // ~5fps — enough for anxiety tracking without hammering the CPU
+  setTimeout(() => faceDetectionLoop(camVid, canvas), 200);
+}
+
+function processFaceResult(detection, canvas) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const label = document.getElementById('face-label');
+
+  if (!detection) {
+    label.textContent = '👤 No face detected';
+    faceAnxietyScore = Math.max(0, faceAnxietyScore - 2);
+    recalcAnxiety(); updateSignals();
+    return;
+  }
+
+  // ── Expression-based anxiety score ──
+  const expr = detection.expressions;
+  // Weighted: fearful + angry + disgusted + sad drive anxiety; happy/surprised reduce it
+  let rawScore =
+    (expr.fearful    || 0) * 100 +
+    (expr.angry      || 0) *  70 +
+    (expr.disgusted  || 0) *  50 +
+    (expr.sad        || 0) *  40 -
+    (expr.happy      || 0) *  30 -
+    (expr.surprised  || 0) *  10;
+  rawScore = Math.min(100, Math.max(0, rawScore));
+
+  // Also factor in landmark-based brow/eye tension
+  const lm = detection.landmarks.positions; // array of {x,y} in image pixels
+  const W = canvas.width, H = canvas.height;
+  // Scale landmarks from video intrinsic size to canvas display size
+  const scaleX = W / (detection.detection.imageWidth  || W);
+  const scaleY = H / (detection.detection.imageHeight || H);
+
+  // Brow distance: point 19 (L inner brow) vs 24 (R inner brow) — closer = furrowed
+  const browGap = Math.abs(lm[19].x - lm[24].x) * scaleX;
+  // Eye openness: point 37–41 (left eye top/bottom)
+  const eyeH    = Math.abs(lm[37].y - lm[41].y) * scaleY;
+
+  let landmarkBoost = 0;
+  if (browGap < 18)  landmarkBoost += 20; else if (browGap < 30) landmarkBoost += 10;
+  if (eyeH    < 4)   landmarkBoost += 15; else if (eyeH    < 7)  landmarkBoost += 7;
+
+  const combined = Math.min(100, rawScore * 0.7 + landmarkBoost * 0.3);
+  faceAnxietyScore = faceAnxietyScore * 0.65 + combined * 0.35; // smooth
+
+  // ── Draw bounding box ──
+  const box = detection.detection.box;
+  const x = box.x * scaleX, y = box.y * scaleY;
+  const w = box.width * scaleX, h = box.height * scaleY;
+  const color = faceAnxietyScore > 60 ? '#FF4D5A' : faceAnxietyScore > 30 ? '#FF9F1C' : '#06D6A0';
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.roundRect(x - 4, y - 4, w + 8, h + 8, 8);
+  ctx.stroke();
+
+  // ── Draw key landmark dots ──
+  ctx.fillStyle = color;
+  // Eyes, brows, nose tip, mouth corners
+  [19, 24, 36, 45, 30, 48, 54, 37, 41, 43, 47].forEach(i => {
+    if (!lm[i]) return;
+    ctx.beginPath();
+    ctx.arc(lm[i].x * scaleX, lm[i].y * scaleY, 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // ── Dominant expression tag ──
+  const top = Object.entries(expr).sort((a,b) => b[1]-a[1])[0];
+  const emojiMap = { happy:'😊', sad:'😢', angry:'😠', fearful:'😨', disgusted:'🤢', surprised:'😲', neutral:'😐' };
+  const stressLabel = faceAnxietyScore > 60 ? '😰 High stress' : faceAnxietyScore > 30 ? '😐 Mild stress' : '😌 Calm';
+  label.textContent = `${emojiMap[top[0]]||''} ${stressLabel}`;
+
+  recalcAnxiety(); updateSignals();
+}
+
+function simulateFaceData() {
+  setInterval(() => {
+    const noise = (Math.random() - 0.5) * 18;
+    faceAnxietyScore = Math.min(100, Math.max(0, behavioralScore * 0.6 + noise));
+    const l = faceAnxietyScore > 60 ? '😰 High stress (sim)' : faceAnxietyScore > 30 ? '😐 Mild stress (sim)' : '😌 Calm (sim)';
+    document.getElementById('face-label').textContent = l;
+  }, 2000);
+}
+
+</script>
+</body>
+</html>
